@@ -2,22 +2,14 @@
  * Server-side auth helpers.
  *
  * Plain async functions for Server Components, Route Handlers, and Server Actions.
+ * Client components must import from `@/lib/auth-shared` instead.
  */
 
 import { createClient } from "@/lib/supabase/server";
 import type { Location, Profile, UserRole } from "@/lib/db/types";
+import type { CurrentProfile } from "@/lib/auth-shared";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-export interface CurrentProfile {
-  id: string;
-  full_name: string;
-  /** Two-letter initials derived from full_name — ready for avatar circles. */
-  initials: string;
-  role: UserRole;
-  location_id: string | null;
-  location: Location | null;
-}
+export type { CurrentProfile, DevPreviewState } from "@/lib/auth-shared";
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 

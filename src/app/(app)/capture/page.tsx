@@ -3,7 +3,7 @@ import { getCurrentProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { CaptureFlow } from "@/components/capture/capture-flow";
 import { APP_NAME } from "@/lib/brand";
-import type { Employee, ReasonCode } from "@/lib/db/types";
+import type { Employee, Location, ReasonCode } from "@/lib/db/types";
 
 export const metadata = { title: `Фиксация списания · ${APP_NAME}` };
 
@@ -13,7 +13,6 @@ export default async function CapturePage() {
 
   const supabase = await createClient();
 
-  // Load reason codes
   const { data: rawReasonCodes } = await supabase
     .from("reason_codes")
     .select("*")
@@ -21,7 +20,16 @@ export default async function CapturePage() {
 
   const reasonCodes = (rawReasonCodes ?? []) as ReasonCode[];
 
-  // Load material-liability employees at this location
+  const { data: rawLocations } = await supabase
+    .from("locations")
+    .select("id, name, lat, lng, geofence_radius_m")
+    .order("name");
+
+  const locations = (rawLocations ?? []) as Pick<
+    Location,
+    "id" | "name" | "lat" | "lng" | "geofence_radius_m"
+  >[];
+
   let materialLiabilityEmployees: Employee[] = [];
   if (profile.location_id) {
     const { data: rawEmployees } = await supabase
@@ -37,6 +45,7 @@ export default async function CapturePage() {
     <CaptureFlow
       profile={profile}
       reasonCodes={reasonCodes}
+      locations={locations}
       materialLiabilityEmployees={materialLiabilityEmployees}
     />
   );

@@ -20,8 +20,10 @@ import {
 } from "lucide-react";
 import { APP_NAME } from "@/lib/brand";
 import { AccountBlock } from "@/components/account-block";
-import type { CurrentProfile } from "@/lib/auth";
+import { DevPreviewProvider, useDevPreview } from "@/lib/dev-preview";
+import type { CurrentProfile } from "@/lib/auth-shared";
 import type { UserRole } from "@/lib/db/types";
+import type { DevLocationOption } from "@/components/dev/role-switcher";
 
 // ── Navigation structure ──────────────────────────────────────────────────────
 
@@ -76,18 +78,21 @@ const NAV: Record<UserRole, NavGroup[]> = {
 export interface AppShellClientProps {
   profile: CurrentProfile;
   logoutAction: (formData: FormData) => Promise<void>;
+  devLocations?: DevLocationOption[];
   children: React.ReactNode;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function AppShellClient({
+function AppShellInner({
   profile,
   logoutAction,
+  devLocations,
   children,
 }: AppShellClientProps) {
   const pathname = usePathname();
   const [theme, setTheme] = useState<"light" | "dark">("light");
+  const { effectiveRole } = useDevPreview();
 
   // Sync with data-theme set on <html> server-side; runs after hydration — no mismatch.
   useEffect(() => {
@@ -104,8 +109,8 @@ export function AppShellClient({
     return pathname === href || pathname.startsWith(href + "/");
   }
 
-  const navGroups = NAV[profile.role];
-  const isEmployee = profile.role === "employee";
+  const navGroups = NAV[effectiveRole];
+  const isEmployee = effectiveRole === "employee";
   const bottomItems = navGroups.flatMap((g) => g.items);
 
   // ── Nav link ──────────────────────────────────────────────────────────────
@@ -247,7 +252,11 @@ export function AppShellClient({
 
           {/* Account block — identity + settings + logout */}
           <div style={{ borderTop: "1px solid var(--border)" }}>
-            <AccountBlock profile={profile} logoutAction={logoutAction} />
+            <AccountBlock
+              profile={profile}
+              logoutAction={logoutAction}
+              devLocations={devLocations}
+            />
           </div>
         </aside>
 
@@ -291,5 +300,13 @@ export function AppShellClient({
         </nav>
       )}
     </div>
+  );
+}
+
+export function AppShellClient(props: AppShellClientProps) {
+  return (
+    <DevPreviewProvider realRole={props.profile.role}>
+      <AppShellInner {...props} />
+    </DevPreviewProvider>
   );
 }

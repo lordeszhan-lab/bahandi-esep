@@ -10,8 +10,14 @@ import {
 import { CameraCapture, type CaptureResult } from "./camera";
 import { ReasonGrid } from "./reason-grid";
 import { submitWriteoff, type SubmitResult } from "@/lib/actions/submit-writeoff";
-import type { CurrentProfile } from "@/lib/auth";
-import type { ReasonCode, Employee } from "@/lib/db/types";
+import { getMaterialLiabilityEmployees } from "@/lib/actions/get-location-employees";
+import {
+  CAPTURE_LOCATION_STORAGE_KEY,
+  resolveCaptureLocationId,
+  type CurrentProfile,
+} from "@/lib/auth-shared";
+import { useDevPreview } from "@/lib/dev-preview";
+import type { ReasonCode, Employee, Location } from "@/lib/db/types";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -83,9 +89,13 @@ function useCountUp(target: number, active: boolean): number {
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
+export interface CaptureLocation
+  extends Pick<Location, "id" | "name" | "lat" | "lng" | "geofence_radius_m"> {}
+
 export interface CaptureFlowProps {
   profile: CurrentProfile;
   reasonCodes: ReasonCode[];
+  locations: CaptureLocation[];
   materialLiabilityEmployees: Employee[];
 }
 
@@ -94,8 +104,75 @@ export interface CaptureFlowProps {
 export function CaptureFlow({
   profile,
   reasonCodes,
-  materialLiabilityEmployees,
+  locations,
+  materialLiabilityEmployees: initialEmployees,
 }: CaptureFlowProps) {
+  const { preview } = useDevPreview();
+  const needsLocationPick = !profile.location_id;
+
+  const [sessionLocationId, setSessionLocationId] = useState<string | null>(
+    null,
+  );
+  const [sessionLocationReady, setSessionLocationReady] = useState(
+    !needsLocationPick,
+  );
+  const [employees, setEmployees] = useState(initialEmployees);
+  const [employeesLoading, setEmployeesLoading] = useState(false);
+
+  // Restore session location from localStorage (location-less profiles only)
+  useEffect(() => {
+    if (!needsLocationPick) return;
+    try {
+      const stored = localStorage.getItem(CAPTURE_LOCATION_STORAGE_KEY);
+      const fallback = preview.locationId;
+      const initial = stored || fallback || null;
+      if (initial) setSessionLocationId(initial);
+    } catch {
+      /* ignore */
+    } finally {
+      setSessionLocationReady(true);
+    }
+  }, [needsLocationPick, preview.locationId]);
+
+  const activeLocationId = resolveCaptureLocationId(
+    profile.location_id,
+    sessionLocationId,
+    preview,
+  );
+
+  const activeLocation = useMemo(() => {
+    if (profile.location) return profile.location;
+    return locations.find((l) => l.id === activeLocationId) ?? null;
+  }, [profile.location, locations, activeLocationId]);
+
+  // Load material-liability employees when session location changes
+  useEffect(() => {
+    if (!needsLocationPick || !activeLocationId) {
+      setEmployees(initialEmployees);
+      return;
+    }
+    let cancelled = false;
+    setEmployeesLoading(true);
+    getMaterialLiabilityEmployees(activeLocationId)
+      .then((rows) => {
+        if (!cancelled) setEmployees(rows);
+      })
+      .finally(() => {
+        if (!cancelled) setEmployeesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [needsLocationPick, activeLocationId, initialEmployees]);
+
+  const handleSessionLocationChange = useCallback((locationId: string) => {
+    setSessionLocationId(locationId);
+    try {
+      localStorage.setItem(CAPTURE_LOCATION_STORAGE_KEY, locationId);
+    } catch {
+      /* ignore */
+    }
+  }, []);
   const [step, setStep] = useState<"camera" | "form" | "success">("camera");
   const [captureResult, setCaptureResult] = useState<CaptureResult | null>(
     null,
@@ -110,7 +187,7 @@ export function CaptureFlow({
 
   // ── Geofence warning ───────────────────────────────────────────────────────
   const geofenceWarning = useMemo(() => {
-    const loc = profile.location;
+    const loc = activeLocation;
     if (!captureResult?.gpsLat || !captureResult?.gpsLng) return false;
     if (!loc?.lat || !loc?.lng) return false;
     const dist = distanceM(
@@ -120,7 +197,7 @@ export function CaptureFlow({
       loc.lng,
     );
     return dist > (loc.geofence_radius_m ?? 150);
-  }, [captureResult, profile.location]);
+  }, [captureResult, activeLocation]);
 
   // ── Camera → form ──────────────────────────────────────────────────────────
   const handleCapture = useCallback((result: CaptureResult) => {
@@ -150,7 +227,7 @@ export function CaptureFlow({
 
   // ── Submit ─────────────────────────────────────────────────────────────────
   const handleSubmit = async () => {
-    if (!validate() || !captureResult || submitting) return;
+    if (!validate() || !captureResult || submitting || !activeLocationId) return;
     setSubmitting(true);
     setSubmitError(null);
     try {
@@ -168,6 +245,7 @@ export function CaptureFlow({
         gpsLat: captureResult.gpsLat,
         gpsLng: captureResult.gpsLng,
         capturedAt: captureResult.capturedAt,
+        locationId: activeLocationId,
       });
       setSubmitResult(result);
       setStep("success");
@@ -190,8 +268,8 @@ export function CaptureFlow({
     setStep("camera");
   };
 
-  // ── No location guard ──────────────────────────────────────────────────────
-  if (!profile.location_id) {
+  // ── No locations in DB ─────────────────────────────────────────────────────
+  if (locations.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center gap-4 py-16 px-6 text-center">
         <div
@@ -201,10 +279,51 @@ export function CaptureFlow({
           <MapPin size={26} style={{ color: "var(--risk-watch-ink)" }} />
         </div>
         <p className="text-base font-semibold max-w-xs" style={{ color: "var(--fg)" }}>
-          Ваш профиль не привязан к точке. Обратитесь к администратору.
+          Нет доступных точек. Обратитесь к администратору.
         </p>
       </div>
     );
+  }
+
+  // ── Location picker (profile without assigned location) ────────────────────
+  if (needsLocationPick && sessionLocationReady && !activeLocationId) {
+    return (
+      <div className="mx-auto max-w-lg px-4 py-6">
+        <p className="eyebrow mb-2">Точка</p>
+        <h1
+          className="text-xl font-extrabold mb-2"
+          style={{ color: "var(--fg)" }}
+        >
+          Выберите точку
+        </h1>
+        <p className="text-sm mb-5" style={{ color: "var(--fg-muted)" }}>
+          Профиль не привязан к точке — выберите, где вы сейчас работаете.
+        </p>
+        <label className="block">
+          <span className="label">Точка списания</span>
+          <select
+            className="input"
+            value=""
+            onChange={(e) => {
+              if (e.target.value) handleSessionLocationChange(e.target.value);
+            }}
+          >
+            <option value="" disabled>
+              — выберите точку —
+            </option>
+            {locations.map((loc) => (
+              <option key={loc.id} value={loc.id}>
+                {loc.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+    );
+  }
+
+  if (needsLocationPick && !sessionLocationReady) {
+    return null;
   }
 
   // ── Step: success ──────────────────────────────────────────────────────────
@@ -218,6 +337,25 @@ export function CaptureFlow({
   if (step === "camera") {
     return (
       <div className="mx-auto max-w-lg px-4 py-6">
+        {needsLocationPick && activeLocationId && (
+          <div className="mb-4">
+            <label className="block">
+              <span className="label">Точка</span>
+              <select
+                className="input"
+                style={{ padding: "0.5rem 0.75rem", fontSize: "0.875rem" }}
+                value={activeLocationId}
+                onChange={(e) => handleSessionLocationChange(e.target.value)}
+              >
+                {locations.map((loc) => (
+                  <option key={loc.id} value={loc.id}>
+                    {loc.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        )}
         <p className="eyebrow mb-2">Шаг 1 — Фото</p>
         <h1
           className="text-xl font-extrabold mb-6"
@@ -255,9 +393,24 @@ export function CaptureFlow({
         )}
         <div className="min-w-0">
           <p className="eyebrow mb-0.5">Точка</p>
-          <p className="text-sm font-bold truncate" style={{ color: "var(--fg)" }}>
-            {profile.location?.name ?? "—"}
-          </p>
+          {needsLocationPick ? (
+            <select
+              className="input text-sm font-bold"
+              style={{ padding: "0.375rem 0.625rem", marginTop: "0.125rem" }}
+              value={activeLocationId ?? ""}
+              onChange={(e) => handleSessionLocationChange(e.target.value)}
+            >
+              {locations.map((loc) => (
+                <option key={loc.id} value={loc.id}>
+                  {loc.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <p className="text-sm font-bold truncate" style={{ color: "var(--fg)" }}>
+              {activeLocation?.name ?? "—"}
+            </p>
+          )}
           {captureResult?.gpsLat && (
             <span
               className="text-xs"
@@ -412,7 +565,11 @@ export function CaptureFlow({
       {form.withholding && (
         <section className="mb-6">
           <p className="eyebrow mb-3">Ответственный сотрудник</p>
-          {materialLiabilityEmployees.length === 0 ? (
+          {employeesLoading ? (
+            <p className="text-sm" style={{ color: "var(--fg-muted)" }}>
+              Загрузка…
+            </p>
+          ) : employees.length === 0 ? (
             <p
               className="text-sm"
               style={{ color: "var(--fg-muted)" }}
@@ -421,7 +578,7 @@ export function CaptureFlow({
             </p>
           ) : (
             <div className="flex flex-col gap-2">
-              {materialLiabilityEmployees.map((emp) => {
+              {employees.map((emp) => {
                 const isSelected = form.chargedEmployeeId === emp.id;
                 return (
                   <button

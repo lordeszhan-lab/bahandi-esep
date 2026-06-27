@@ -5,7 +5,7 @@
  *   - Public  : /login, /auth/callback  (redirect logged-in users to their home)
  *   - API     : /api/**                 (401 when unauthenticated)
  *   - Root    : /                       (redirect to role home)
- *   - App     : /capture, /review, /admin — cross-role access redirects to home
+ *   - App     : /capture, /review, /admin — cross-role access redirects to home (admin bypasses)
  *
  * Role guard lives here only — pages are unguarded by design.
  */
@@ -127,9 +127,12 @@ export default async function proxy(request: NextRequest): Promise<NextResponse>
   }
 
   // ── Cross-role guard ──────────────────────────────────────────────────────
-  const allowed = ROLE_PREFIXES[role] ?? [];
-  if (!allowed.some((p) => pathname.startsWith(p))) {
-    return NextResponse.redirect(new URL(home, request.url));
+  // admin = superuser preview; tighten before real prod if needed
+  if (role !== "admin") {
+    const allowed = ROLE_PREFIXES[role] ?? [];
+    if (!allowed.some((p) => pathname.startsWith(p))) {
+      return NextResponse.redirect(new URL(home, request.url));
+    }
   }
 
   return getResponse();

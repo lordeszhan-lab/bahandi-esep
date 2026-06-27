@@ -51,7 +51,7 @@ export function LoginForm() {
         <div className="card p-8 sm:p-10">
           {/* Eyebrow */}
           <p className="eyebrow mb-4">
-            {APP_NAME.toUpperCase()} · ПЛАТФОРМА ПОТЕРЬ
+            
           </p>
 
           {/* Heading */}

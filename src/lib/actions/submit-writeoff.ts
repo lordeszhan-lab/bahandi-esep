@@ -26,6 +26,7 @@ const WriteoffSchema = z.object({
   gpsLat: z.number().nullable(),
   gpsLng: z.number().nullable(),
   capturedAt: z.string(),
+  locationId: z.string().uuid().optional().nullable(),
 });
 
 export type WriteoffPayload = z.infer<typeof WriteoffSchema>;
@@ -63,25 +64,41 @@ export async function submitWriteoff(
   // __InternalSupabase marker. See src/lib/auth.ts for the same pattern.
   const { data: rawProfile } = await supabase
     .from("profiles")
-    .select("location_id")
+    .select("location_id, role")
     .eq("id", user.id)
     .single();
-  const profile = rawProfile as Pick<Profile, "location_id"> | null;
-  if (!profile?.location_id) throw new Error("Нет привязки к точке");
+  const profile = rawProfile as Pick<Profile, "location_id"> & {
+    role: string;
+  } | null;
+  if (!profile) throw new Error("Профиль не найден");
+
+  let effectiveLocationId: string;
+  if (profile.location_id) {
+    effectiveLocationId = profile.location_id;
+  } else {
+    if (!d.locationId) throw new Error("Выберите точку");
+    const { data: rawLocCheck } = await supabase
+      .from("locations")
+      .select("id")
+      .eq("id", d.locationId)
+      .single();
+    if (!rawLocCheck) throw new Error("Точка не найдена");
+    effectiveLocationId = d.locationId;
+  }
 
   // ── Fetch location name for success screen ───────────────────────────────────
   const { data: rawLocation } = await supabase
     .from("locations")
     .select("name")
-    .eq("id", profile.location_id)
+    .eq("id", effectiveLocationId)
     .single();
   const location = rawLocation as Pick<Location, "name"> | null;
 
-  // ── Insert writeoff (RLS: submitter_id = auth.uid(), location enforced) ───────
-  // WriteoffInsert satisfies validates shape; `as unknown as never` is the
-  // accepted workaround when __InternalSupabase collapses insert types to never.
+  // ── Insert writeoff ───────────────────────────────────────────────────────────
+  // RLS requires profile.location_id = writeoff.location_id; session-picked locations
+  // (admins / unassigned employees) bypass via service role after auth validation.
   const writeoffRow: WriteoffInsert = {
-    location_id: profile.location_id,
+    location_id: effectiveLocationId,
     submitter_id: user.id,
     reason_code_id: d.reasonCodeId,
     qty: d.qty,
@@ -92,13 +109,30 @@ export async function submitWriteoff(
       d.withholding && d.chargedEmployeeId ? d.chargedEmployeeId : null,
     status: "submitted",
   };
-  const { data: rawWriteoff, error: wErr } = await supabase
-    .from("writeoffs")
-    .insert(writeoffRow as unknown as never)
-    .select("id")
-    .single();
 
-  const writeoff = rawWriteoff as Pick<Writeoff, "id"> | null;
+  let rawWriteoff: Pick<Writeoff, "id"> | null = null;
+  let wErr: { message: string } | null = null;
+
+  if (profile.location_id) {
+    const result = await supabase
+      .from("writeoffs")
+      .insert(writeoffRow as unknown as never)
+      .select("id")
+      .single();
+    rawWriteoff = result.data as Pick<Writeoff, "id"> | null;
+    wErr = result.error;
+  } else {
+    const serviceClient = createServiceClient();
+    const result = await serviceClient
+      .from("writeoffs")
+      .insert(writeoffRow as unknown as never)
+      .select("id")
+      .single();
+    rawWriteoff = result.data as Pick<Writeoff, "id"> | null;
+    wErr = result.error;
+  }
+
+  const writeoff = rawWriteoff;
   if (wErr || !writeoff)
     throw new Error(`Ошибка при создании записи: ${wErr?.message}`);
 
