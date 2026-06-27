@@ -1,0 +1,355 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* ─── Dark-mode variant keyed on data-theme attribute ─────────────────────── */
+@custom-variant dark ([data-theme="dark"] &);
+
+/* ─── Bahandi esep Design Tokens ────────────────────────────────────────────────── */
+:root {
+  /* Brand — institutional green, not neon */
+  --brand:        #16A34A;
+  --brand-strong: #15803D;
+  --brand-soft:   #DCFCE7;
+  --brand-ring:   #86EFAC;
+
+  /* Canvas & surfaces */
+  --canvas:    #F6F8F7;
+  --surface:   #FFFFFF;
+  --surface-2: #F7F9F8;
+  --border:    #E8ECEA;
+
+  /* Foreground scale */
+  --fg:       #1A1A1A;
+  --fg-muted: #6B7280;
+  --fg-faint: #9CA3AF;
+
+  /* Risk triad — the semantic colour layer */
+  --risk-clean:      #16A34A;
+  --risk-clean-soft: #DCFCE7;
+  --risk-clean-ink:  #15803D;
+
+  --risk-watch:      #FF9600;
+  --risk-watch-soft: #FFF1E0;
+  --risk-watch-ink:  #C2410C;
+
+  --risk-fraud:      #FF4B4B;
+  --risk-fraud-soft: #FEE2E2;
+  --risk-fraud-ink:  #B91C1C;
+
+  --risk-info:       #1CB0F6;
+  --risk-info-soft:  #E0F4FE;
+  --risk-info-ink:   #0369A1;
+
+  /* Loss-type chips (pastel bg / ink icon) */
+  --chip-tech-bg:    #EEF1F4; --chip-tech-ink:    #475569;
+  --chip-quality-bg: #E0F4FE; --chip-quality-ink: #0369A1;
+  --chip-damage-bg:  #FFF1E0; --chip-damage-ink:  #C2410C;
+  --chip-spoil-bg:   #D7F5F0; --chip-spoil-ink:   #0F766E;
+  --chip-return-bg:  #F6E9FF; --chip-return-ink:  #7E22CE;
+  --chip-break-bg:   #FFF6D6; --chip-break-ink:   #A16207;
+
+  /* Elevation — soft shadow, never border, never coloured top-bar */
+  --shadow-card:       0 1px 2px rgba(16,24,20,.04), 0 8px 24px rgba(16,24,20,.06);
+  --shadow-card-hover: 0 2px 4px rgba(16,24,20,.06), 0 14px 32px rgba(16,24,20,.10);
+
+  /* Radii */
+  --radius-card: 16px;
+  --radius-ctl:  12px;
+  --radius-chip: 14px;
+}
+
+/* ─── Dark theme overrides (colour only; radii/shadows stay the same) ─────── */
+[data-theme="dark"] {
+  --brand:     #22C55E;
+  --canvas:    #0B0F0E;
+  --surface:   #14201C;
+  --surface-2: #1B2A25;
+  --border:    #26352F;
+  --fg:        #F3F5F4;
+  --fg-muted:  #9AA5A0;
+}
+
+/* ─── Tailwind v4 @theme — mirrors tokens as Tailwind utility names ────────
+   @theme inline: skips adding duplicates to :root; just generates utilities
+   that resolve through the CSS custom properties above.
+   ─────────────────────────────────────────────────────────────────────────── */
+@theme inline {
+  /* Brand */
+  --color-brand:        var(--brand);
+  --color-brand-strong: var(--brand-strong);
+  --color-brand-soft:   var(--brand-soft);
+  --color-brand-ring:   var(--brand-ring);
+
+  /* Canvas / surfaces */
+  --color-canvas:    var(--canvas);
+  --color-surface:   var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border:    var(--border);
+
+  /* Foreground */
+  --color-fg:       var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-faint: var(--fg-faint);
+
+  /* Risk triad */
+  --color-risk-clean:      var(--risk-clean);
+  --color-risk-clean-soft: var(--risk-clean-soft);
+  --color-risk-clean-ink:  var(--risk-clean-ink);
+  --color-risk-watch:      var(--risk-watch);
+  --color-risk-watch-soft: var(--risk-watch-soft);
+  --color-risk-watch-ink:  var(--risk-watch-ink);
+  --color-risk-fraud:      var(--risk-fraud);
+  --color-risk-fraud-soft: var(--risk-fraud-soft);
+  --color-risk-fraud-ink:  var(--risk-fraud-ink);
+  --color-risk-info:       var(--risk-info);
+  --color-risk-info-soft:  var(--risk-info-soft);
+  --color-risk-info-ink:   var(--risk-info-ink);
+
+  /* Radii → rounded-card, rounded-ctl, rounded-chip */
+  --radius-card: var(--radius-card);
+  --radius-ctl:  var(--radius-ctl);
+  --radius-chip: var(--radius-chip);
+
+  /* Shadows → shadow-card, shadow-card-hover */
+  --shadow-card:       var(--shadow-card);
+  --shadow-card-hover: var(--shadow-card-hover);
+
+  /* Typography */
+  --font-sans: var(--font-nunito), "Nunito", ui-sans-serif, system-ui, sans-serif;
+}
+
+/* ─── Base styles ─────────────────────────────────────────────────────────── */
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    background: var(--canvas);
+    color: var(--fg);
+    font-family: var(--font-nunito), "Nunito", ui-sans-serif, sans-serif;
+    font-feature-settings: "tnum";
+    font-variant-numeric: tabular-nums;
+    line-height: 1.5;
+    min-height: 100dvh;
+  }
+
+  /* Visible focus ring — a11y requirement */
+  :focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}
+
+/* ─── Component utility classes ───────────────────────────────────────────── */
+@layer components {
+
+  /* Card — white surface, soft shadow, hover lift */
+  .card {
+    background: var(--surface);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-card);
+    padding: 1.25rem 1.5rem;
+    transition: transform 150ms ease-out, box-shadow 150ms ease-out;
+  }
+
+  .card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-card-hover);
+  }
+
+  /* Primary button — solid brand fill, white text, rounded-full */
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    background: var(--brand);
+    color: #ffffff;
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 0.9375rem;
+    line-height: 1;
+    padding: 0.625rem 1.25rem;
+    border-radius: 9999px;
+    border: none;
+    cursor: pointer;
+    box-shadow: var(--shadow-card);
+    transition: background 150ms ease-out, transform 150ms ease-out, box-shadow 150ms ease-out;
+    user-select: none;
+    white-space: nowrap;
+    text-decoration: none;
+  }
+
+  .btn-primary:hover {
+    background: var(--brand-strong);
+    box-shadow: var(--shadow-card-hover);
+  }
+
+  .btn-primary:active {
+    transform: scale(0.99);
+  }
+
+  .btn-primary:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+
+  /* 3D-ledge button — joy layer only (frontline capture) */
+  .btn-ledge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    background: var(--brand);
+    color: #ffffff;
+    font-family: inherit;
+    font-weight: 800;
+    font-size: 0.9375rem;
+    line-height: 1;
+    padding: 0.625rem 1.5rem;
+    border-radius: 9999px;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 4px 0 var(--brand-strong);
+    transition: transform 120ms ease-out, box-shadow 120ms ease-out;
+    user-select: none;
+    white-space: nowrap;
+    text-decoration: none;
+  }
+
+  .btn-ledge:hover {
+    background: var(--brand-strong);
+  }
+
+  .btn-ledge:active {
+    transform: translateY(4px);
+    box-shadow: 0 0 0 var(--brand-strong);
+  }
+
+  .btn-ledge:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+
+  /* Chip — squircle pastel background + ink icon/label */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    background: var(--chip-bg, var(--brand-soft));
+    color: var(--chip-ink, var(--brand-strong));
+    font-size: 0.8125rem;
+    font-weight: 600;
+    line-height: 1;
+    padding: 0.3125rem 0.625rem;
+    border-radius: var(--radius-chip);
+    white-space: nowrap;
+  }
+
+  /* Chip variants by loss-type */
+  .chip-tech    { background: var(--chip-tech-bg);    color: var(--chip-tech-ink);    }
+  .chip-quality { background: var(--chip-quality-bg); color: var(--chip-quality-ink); }
+  .chip-damage  { background: var(--chip-damage-bg);  color: var(--chip-damage-ink);  }
+  .chip-spoil   { background: var(--chip-spoil-bg);   color: var(--chip-spoil-ink);   }
+  .chip-return  { background: var(--chip-return-bg);  color: var(--chip-return-ink);  }
+  .chip-break   { background: var(--chip-break-bg);   color: var(--chip-break-ink);   }
+
+  /* Status pill — risk-semantic, fully rounded */
+  .pill-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3125rem;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    line-height: 1;
+    padding: 0.25rem 0.625rem;
+    border-radius: 9999px;
+    white-space: nowrap;
+    /* Default: clean/approved */
+    background: var(--risk-clean-soft);
+    color: var(--risk-clean-ink);
+  }
+
+  .pill-status[data-risk="clean"]    { background: var(--risk-clean-soft); color: var(--risk-clean-ink); }
+  .pill-status[data-risk="watch"]    { background: var(--risk-watch-soft); color: var(--risk-watch-ink); }
+  .pill-status[data-risk="fraud"]    { background: var(--risk-fraud-soft); color: var(--risk-fraud-ink); }
+  .pill-status[data-risk="info"]     { background: var(--risk-info-soft);  color: var(--risk-info-ink);  }
+
+  /* Eyebrow — mono uppercase label (section headers, field labels) */
+  .eyebrow {
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--fg-muted);
+  }
+
+  /* Form label */
+  .label {
+    display: block;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--fg-muted);
+    margin-bottom: 0.375rem;
+  }
+
+  /* Text / email / password inputs */
+  .input {
+    display: block;
+    width: 100%;
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-ctl);
+    padding: 0.625rem 0.875rem;
+    font-family: inherit;
+    font-size: 0.9375rem;
+    color: var(--fg);
+    outline: none;
+    transition: border-color 150ms ease-out, box-shadow 150ms ease-out;
+  }
+
+  .input:focus {
+    border-color: var(--brand);
+    box-shadow: 0 0 0 3px var(--brand-soft);
+  }
+
+  .input::placeholder {
+    color: var(--fg-faint);
+  }
+
+  .input[aria-invalid="true"],
+  .input.error {
+    border-color: var(--risk-fraud);
+  }
+
+  .input:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+}
+
+/* ─── Reduced motion — disable lifts/springs, keep instant states ─────────── */
+@media (prefers-reduced-motion: reduce) {
+  .card,
+  .card:hover,
+  .btn-primary,
+  .btn-ledge {
+    transition: none;
+    transform: none;
+    animation: none;
+  }
+}

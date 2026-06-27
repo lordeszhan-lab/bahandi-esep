@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Next.js build and cache
+.next/
+.turbo/
+out/
+build/
+
+# Environmental variables 
+.env
+.env.local
+.env.production
+.env.local.production
+.env.development
+.env.local.development
+.env.test
+.env.local.test
+.env.production.local
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# System files
+.DS_Store
+*.pem
