@@ -3,7 +3,7 @@ import { getCurrentProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { CaptureFlow } from "@/components/capture/capture-flow";
 import { APP_NAME } from "@/lib/brand";
-import type { Employee, Location, ReasonCode } from "@/lib/db/types";
+import type { Employee, Store, ReasonCode } from "@/lib/db/types";
 
 export const metadata = { title: `Фиксация списания · ${APP_NAME}` };
 
@@ -20,16 +20,9 @@ export default async function CapturePage() {
 
   const reasonCodes = (rawReasonCodes ?? []) as ReasonCode[];
 
-  const { data: rawLocations } = await supabase
-    .from("locations")
-    .select("id, name, lat, lng, geofence_radius_m")
-    .order("name");
-
-  const locations = (rawLocations ?? []) as Pick<
-    Location,
-    "id" | "name" | "lat" | "lng" | "geofence_radius_m"
-  >[];
-
+  // Employees capture against their ASSIGNED branch (profile.location) — they
+  // never see the store network. Only the admin session picker needs the full
+  // list, so fetch it for admins only.
   let materialLiabilityEmployees: Employee[] = [];
   if (profile.location_id) {
     const { data: rawEmployees } = await supabase
@@ -41,11 +34,24 @@ export default async function CapturePage() {
     materialLiabilityEmployees = (rawEmployees ?? []) as Employee[];
   }
 
+  const stores =
+    profile.role === "admin"
+      ? ((await supabase
+          .from("stores")
+          .select("id, name, display_name, city, lat, lng, geofence_radius_m")
+          .order("city", { ascending: true })
+          .order("name", { ascending: true })).data ??
+        []) as Pick<
+          Store,
+          "id" | "name" | "display_name" | "city" | "lat" | "lng" | "geofence_radius_m"
+        >[]
+      : [];
+
   return (
     <CaptureFlow
       profile={profile}
       reasonCodes={reasonCodes}
-      locations={locations}
+      stores={stores}
       materialLiabilityEmployees={materialLiabilityEmployees}
     />
   );

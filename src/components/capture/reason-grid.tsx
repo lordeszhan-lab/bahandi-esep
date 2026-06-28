@@ -9,57 +9,131 @@ import {
   Wine,
   type LucideIcon,
 } from "lucide-react";
+import { IconChip } from "@/components/ui/icon-chip";
 import type { ReasonCode, ReasonCategory } from "@/lib/db/types";
 
-// ── Category metadata ─────────────────────────────────────────────────────────
+// ── Category → chip colours ───────────────────────────────────────────────────
+// Pastel bg + saturated ink per СВЕРКА design system.
+// Colour lives ONLY in the squircle chip — card title stays --fg.
 
 interface CategoryMeta {
   icon: LucideIcon;
-  chipClass: string;
   bg: string;
+  bgHover: string;    // slightly deeper pastel on card hover
   ink: string;
 }
 
 const CATEGORY_META: Record<ReasonCategory, CategoryMeta> = {
   yield: {
     icon: FlaskConical,
-    chipClass: "chip-tech",
     bg: "var(--chip-tech-bg)",
+    bgHover: "#E2E6EA",
     ink: "var(--chip-tech-ink)",
   },
   quality: {
     icon: CircleX,
-    chipClass: "chip-quality",
     bg: "var(--chip-quality-bg)",
+    bgHover: "#C8EAF8",
     ink: "var(--chip-quality-ink)",
   },
   accidental: {
     icon: Zap,
-    chipClass: "chip-damage",
     bg: "var(--chip-damage-bg)",
+    bgHover: "#FFE4C4",
     ink: "var(--chip-damage-ink)",
   },
   spoilage: {
     icon: Leaf,
-    chipClass: "chip-spoil",
     bg: "var(--chip-spoil-bg)",
+    bgHover: "#BFEDDF",
     ink: "var(--chip-spoil-ink)",
   },
   return: {
     icon: Undo2,
-    chipClass: "chip-return",
     bg: "var(--chip-return-bg)",
+    bgHover: "#ECD6FF",
     ink: "var(--chip-return-ink)",
   },
   breakage: {
     icon: Wine,
-    chipClass: "chip-break",
     bg: "var(--chip-break-bg)",
+    bgHover: "#FFF0B0",
     ink: "var(--chip-break-ink)",
   },
 };
 
-// ── Component ─────────────────────────────────────────────────────────────────
+// ── Card ──────────────────────────────────────────────────────────────────────
+
+interface ReasonCardProps {
+  rc: ReasonCode;
+  meta: CategoryMeta;
+  isSelected: boolean;
+  animDelay: number;
+  onSelect: () => void;
+}
+
+function ReasonCard({
+  rc,
+  meta,
+  isSelected,
+  animDelay,
+  onSelect,
+}: ReasonCardProps) {
+  return (
+    <button
+      key={rc.id}
+      type="button"
+      role="radio"
+      aria-checked={isSelected}
+      data-selected={isSelected}
+      onClick={onSelect}
+      // fade-up handled by .fade-up class + inline delay
+      className="reason-card fade-up text-left"
+      style={{
+        // Selected overrides the .reason-card bg/shadow/transform
+        ...(isSelected
+          ? {
+              background: "var(--brand)",
+              boxShadow:
+                "0 0 0 3px var(--brand-ring), var(--shadow-card-hover)",
+              transform: "translateY(-2px)",
+            }
+          : {}),
+        borderRadius: "var(--radius-card)",
+        padding: "1.125rem",
+        border: "none",
+        cursor: "pointer",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "flex-start",
+        gap: "0.625rem",
+        animationDelay: `${animDelay}ms`,
+      }}
+    >
+      {/* Pastel squircle chip — colour layer */}
+      <IconChip
+        Icon={meta.icon}
+        bg={isSelected ? "rgba(255,255,255,0.22)" : meta.bg}
+        ink={isSelected ? "#fff" : meta.ink}
+        size={20}
+      />
+
+      {/* Title — always neutral --fg except when selected (white) */}
+      <span
+        style={{
+          fontSize: "0.875rem",
+          fontWeight: 700,
+          lineHeight: 1.3,
+          color: isSelected ? "#fff" : "var(--fg)",
+        }}
+      >
+        {rc.label_ru}
+      </span>
+    </button>
+  );
+}
+
+// ── Grid ──────────────────────────────────────────────────────────────────────
 
 interface ReasonGridProps {
   reasonCodes: ReasonCode[];
@@ -70,54 +144,23 @@ interface ReasonGridProps {
 export function ReasonGrid({ reasonCodes, selected, onSelect }: ReasonGridProps) {
   return (
     <div
+      role="radiogroup"
+      aria-label="Причина списания"
       className="grid gap-3"
       style={{ gridTemplateColumns: "repeat(2, 1fr)" }}
     >
-      {reasonCodes.map((rc) => {
+      {reasonCodes.map((rc, i) => {
         const cat = rc.category as ReasonCategory;
         const meta = CATEGORY_META[cat] ?? CATEGORY_META.yield;
-        const Icon = meta.icon;
-        const isSelected = selected === rc.id;
-
         return (
-          <button
+          <ReasonCard
             key={rc.id}
-            type="button"
-            onClick={() => onSelect(rc.id)}
-            style={{
-              background: isSelected ? "var(--brand)" : meta.bg,
-              color: isSelected ? "#fff" : meta.ink,
-              borderRadius: "var(--radius-card)",
-              padding: "1rem",
-              border: isSelected
-                ? "2px solid var(--brand)"
-                : "2px solid transparent",
-              boxShadow: isSelected
-                ? "0 0 0 3px var(--brand-ring), var(--shadow-card-hover)"
-                : "var(--shadow-card)",
-              transform: isSelected ? "translateY(-2px)" : "translateY(0)",
-              transition:
-                "background 150ms, color 150ms, box-shadow 150ms, transform 150ms",
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "flex-start",
-              gap: "0.625rem",
-              cursor: "pointer",
-              textAlign: "left",
-            }}
-          >
-            <span
-              className="flex items-center justify-center w-10 h-10 rounded-xl"
-              style={{
-                background: isSelected ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.06)",
-              }}
-            >
-              <Icon size={22} />
-            </span>
-            <span className="text-sm font-bold leading-snug">
-              {rc.label_ru}
-            </span>
-          </button>
+            rc={rc}
+            meta={meta}
+            isSelected={selected === rc.id}
+            animDelay={i * 45}
+            onSelect={() => onSelect(rc.id)}
+          />
         );
       })}
     </div>

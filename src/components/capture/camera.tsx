@@ -2,12 +2,12 @@
 
 import { useRef, useCallback, useEffect, useState } from "react";
 import { RotateCcw, ArrowRight, WifiOff, Camera } from "lucide-react";
-import { uploadPhoto } from "@/lib/upload";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface CaptureResult {
-  storagePath: string;
+  /** Raw JPEG blob — kept for the offline queue + vision pre-fill. */
+  blob: Blob;
   capturedAt: string;
   gpsLat: number | null;
   gpsLng: number | null;
@@ -15,7 +15,6 @@ export interface CaptureResult {
 }
 
 interface CameraCaptureProps {
-  userId: string;
   /** Called only when user presses "Далее" after confirming the preview. */
   onCapture: (result: CaptureResult) => void;
 }
@@ -24,7 +23,6 @@ type CamState =
   | "requesting"
   | "live"
   | "snapping"
-  | "uploading"
   | "preview"
   | "error";
 
@@ -44,7 +42,7 @@ function readGps(): Promise<{ lat: number; lng: number } | null> {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function CameraCapture({ userId, onCapture }: CameraCaptureProps) {
+export function CameraCapture({ onCapture }: CameraCaptureProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -122,36 +120,24 @@ export function CameraCapture({ userId, onCapture }: CameraCaptureProps) {
     }
 
     const url = URL.createObjectURL(blob);
+    // Revoke any previous unconfirmed preview before replacing it.
     if (pendingRef.current?.previewUrl)
       URL.revokeObjectURL(pendingRef.current.previewUrl);
     setPreviewSrc(url);
 
-    // Stop stream to save battery during upload
+    // Stop the stream to save battery while the user reviews the shot.
     streamRef.current?.getTracks().forEach((t) => t.stop());
-    setCamState("uploading");
 
-    try {
-      const [gps, upload] = await Promise.all([
-        gpsPromise,
-        uploadPhoto(blob, userId),
-      ]);
-      pendingRef.current = {
-        storagePath: upload.storagePath,
-        capturedAt,
-        gpsLat: gps?.lat ?? null,
-        gpsLng: gps?.lng ?? null,
-        previewUrl: url,
-      };
-      setCamState("preview");
-    } catch (err) {
-      URL.revokeObjectURL(url);
-      setPreviewSrc(null);
-      setErrorMsg(
-        err instanceof Error ? err.message : "Ошибка загрузки фото.",
-      );
-      setCamState("error");
-    }
-  }, [camState, userId]);
+    const gps = await gpsPromise;
+    pendingRef.current = {
+      blob,
+      capturedAt,
+      gpsLat: gps?.lat ?? null,
+      gpsLng: gps?.lng ?? null,
+      previewUrl: url,
+    };
+    setCamState("preview");
+  }, [camState]);
 
   // ── Retake ─────────────────────────────────────────────────────────────────
   const handleRetake = useCallback(() => {
@@ -164,7 +150,12 @@ export function CameraCapture({ userId, onCapture }: CameraCaptureProps) {
 
   // ── Confirm ────────────────────────────────────────────────────────────────
   const handleConfirm = useCallback(() => {
-    if (pendingRef.current) onCapture(pendingRef.current);
+    if (!pendingRef.current) return;
+    // Transfer ownership of the preview URL + blob to the parent. Clearing the
+    // ref means the unmount cleanup will NOT revoke the URL the form still
+    // needs to render the thumbnail.
+    onCapture(pendingRef.current);
+    pendingRef.current = null;
   }, [onCapture]);
 
   // ── Render: error ──────────────────────────────────────────────────────────
@@ -189,15 +180,10 @@ export function CameraCapture({ userId, onCapture }: CameraCaptureProps) {
 
   const isLive = camState === "live";
   const isPreview = camState === "preview";
-  const isLoading =
-    camState === "requesting" || camState === "snapping" || camState === "uploading";
+  const isLoading = camState === "requesting" || camState === "snapping";
 
   const loadingLabel =
-    camState === "requesting"
-      ? "Включаю камеру…"
-      : camState === "snapping"
-        ? "Снимок…"
-        : "Загружаю фото…";
+    camState === "requesting" ? "Включаю камеру…" : "Снимок…";
 
   return (
     <div className="flex flex-col gap-0">

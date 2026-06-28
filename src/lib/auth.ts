@@ -6,10 +6,10 @@
  */
 
 import { createClient } from "@/lib/supabase/server";
-import type { Location, Profile, UserRole } from "@/lib/db/types";
+import type { Store, Profile, UserRole } from "@/lib/db/types";
 import type { CurrentProfile } from "@/lib/auth-shared";
 
-export type { CurrentProfile, DevPreviewState } from "@/lib/auth-shared";
+export type { CurrentProfile } from "@/lib/auth-shared";
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
@@ -47,14 +47,14 @@ export async function getCurrentProfile(): Promise<CurrentProfile | null> {
   const profileData = raw as Profile | null;
   if (profileError || !profileData) return null;
 
-  let location: Location | null = null;
+  let location: Store | null = null;
   if (profileData.location_id) {
     const { data: rawLoc } = await supabase
-      .from("locations")
+      .from("stores")
       .select("*")
       .eq("id", profileData.location_id)
       .single();
-    location = (rawLoc as Location | null) ?? null;
+    location = (rawLoc as Store | null) ?? null;
   }
 
   return {

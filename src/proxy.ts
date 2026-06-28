@@ -5,7 +5,7 @@
  *   - Public  : /login, /auth/callback  (redirect logged-in users to their home)
  *   - API     : /api/**                 (401 when unauthenticated)
  *   - Root    : /                       (redirect to role home)
- *   - App     : /capture, /review, /admin — cross-role access redirects to home (admin bypasses)
+ *   - App     : /capture, /my, /review, /admin — cross-role access redirects to home (admin bypasses)
  *
  * Role guard lives here only — pages are unguarded by design.
  */
@@ -27,7 +27,7 @@ const ROLE_HOME: Record<UserRole, string> = {
 
 /** Path prefixes a role is allowed to visit. */
 const ROLE_PREFIXES: Record<UserRole, string[]> = {
-  employee: ["/capture"],
+  employee: ["/capture", "/my"],
   reviewer: ["/review"],
   admin:    ["/admin"],
 };
@@ -140,6 +140,13 @@ export default async function proxy(request: NextRequest): Promise<NextResponse>
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    // Exclude static assets, the service worker, the web manifest, and the
+    // offline shell from the auth proxy:
+    //   - /sw.js must be served as a plain static script (the browser would
+    //     otherwise follow a login redirect and fail to register the SW);
+    //   - /manifest.webmanifest + /offline must be reachable unauthenticated
+    //     so the SW can precache the offline shell on install and the manifest
+    //     is available for Add to Home Screen from the login page (P23.1).
+    "/((?!_next/static|_next/image|favicon\\.ico|sw\\.js|offline|manifest\\.webmanifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

@@ -1,6 +1,7 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Nunito } from "next/font/google";
 import "./globals.css";
+import { PwaRegister } from "@/components/pwa-register";
 
 const nunito = Nunito({
   subsets: ["latin", "cyrillic"],
@@ -12,6 +13,27 @@ const nunito = Nunito({
 export const metadata: Metadata = {
   title: "Bahandi esep",
   description: "Loss-intelligence platform",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "Esep",
+    statusBarStyle: "default",
+  },
+  icons: {
+    // Favicon is provided by the file-based src/app/icon.png (Next emits the
+    // <link rel="icon"> automatically). apple-touch-icon is wired here so the
+    // iOS home-screen mark is the on-brand green+E, matching the manifest.
+    apple: [
+      { url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#16A34A",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -21,7 +43,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ru" data-theme="light" className={nunito.variable}>
-      <body>{children}</body>
+      <body>
+        {children}
+        <PwaRegister />
+      </body>
     </html>
   );
 }

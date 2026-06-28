@@ -1,16 +1,19 @@
 "use server";
 
-import { createHash } from "crypto";
+import { after } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
+import { runPhotoForensics } from "@/lib/forensics/run";
+import { recomputeAndRoute } from "@/lib/risk/recompute";
+import { appendAuditEntry } from "@/lib/audit";
 import type {
   Profile,
-  Location,
+  Store,
   Writeoff,
   WriteoffInsert,
   WriteoffPhotoInsert,
-  AuditLogInsert,
+  RiskEventInsert,
 } from "@/lib/db/types";
 
 // ── Validation schema ─────────────────────────────────────────────────────────
@@ -27,6 +30,13 @@ const WriteoffSchema = z.object({
   gpsLng: z.number().nullable(),
   capturedAt: z.string(),
   locationId: z.string().uuid().optional().nullable(),
+  /**
+   * Prompt 7 anti-batch signal: true when this submission was flushed from the
+   * offline queue as part of an end-of-shift burst. We never block on it — it
+   * just feeds the risk engine (Prompt 10). null/undefined = filed online in
+   * real time.
+   */
+  batchBurst: z.boolean().nullable().optional(),
 });
 
 export type WriteoffPayload = z.infer<typeof WriteoffSchema>;
@@ -78,7 +88,7 @@ export async function submitWriteoff(
   } else {
     if (!d.locationId) throw new Error("Выберите точку");
     const { data: rawLocCheck } = await supabase
-      .from("locations")
+      .from("stores")
       .select("id")
       .eq("id", d.locationId)
       .single();
@@ -88,11 +98,11 @@ export async function submitWriteoff(
 
   // ── Fetch location name for success screen ───────────────────────────────────
   const { data: rawLocation } = await supabase
-    .from("locations")
+    .from("stores")
     .select("name")
     .eq("id", effectiveLocationId)
     .single();
-  const location = rawLocation as Pick<Location, "name"> | null;
+  const location = rawLocation as Pick<Store, "name"> | null;
 
   // ── Insert writeoff ───────────────────────────────────────────────────────────
   // RLS requires profile.location_id = writeoff.location_id; session-picked locations
@@ -138,6 +148,7 @@ export async function submitWriteoff(
 
   // ── Insert photo row (RLS: writeoff belongs to submitter) ────────────────────
   // created_at defaults to now() — server receive-time acts as spoofing guard
+  // (the forensics pipeline compares it against captured_at).
   const photoRow: WriteoffPhotoInsert = {
     writeoff_id: writeoff.id,
     storage_path: d.storagePath,
@@ -146,9 +157,12 @@ export async function submitWriteoff(
     captured_at: d.capturedAt,
     source: "camera",
   };
-  const { error: photoErr } = await supabase
+  const { data: photoData, error: photoErr } = await supabase
     .from("writeoff_photos")
-    .insert(photoRow as unknown as never);
+    .insert(photoRow as unknown as never)
+    .select("id")
+    .single();
+  const photoId = (photoData as { id: string } | null)?.id ?? null;
 
   if (photoErr) {
     // Photo row failed — writeoff is already committed. Log and continue.
@@ -156,30 +170,87 @@ export async function submitWriteoff(
   }
 
   // ── Audit log (service role — no user INSERT policy by design) ───────────────
-  const logPayload = {
-    writeoff_id: writeoff.id,
-    actor_id: user.id,
+  // Hash-chained via the centralized audit module (Prompt 13): this row links
+  // to the global chain head by prev_hash, so the submission is bound into the
+  // tamper-evident trail alongside every later transition.
+  const batchBurst = d.batchBurst === true;
+  const logPayload: Record<string, unknown> = {
     qty: d.qty,
     unit: d.unit,
     reason_code_id: d.reasonCodeId,
     withholding: d.withholding,
+    batch_burst: batchBurst,
     ...(d.withholding && d.chargedEmployeeId
       ? { charged_employee_id: d.chargedEmployeeId }
       : {}),
   };
-  const hash = createHash("sha256")
-    .update(JSON.stringify(logPayload))
-    .digest("hex");
 
   const serviceClient = createServiceClient();
-  const auditEntry: AuditLogInsert = {
-    writeoff_id: writeoff.id,
-    actor_id: user.id,
-    action: "submitted",
-    hash,
-    payload: logPayload,
-  };
-  await serviceClient.from("audit_log").insert(auditEntry);
+  try {
+    await appendAuditEntry(serviceClient, {
+      writeoffId: writeoff.id,
+      actorId: user.id,
+      action: "submitted",
+      payload: logPayload,
+    });
+  } catch (err) {
+    // The writeoff + photo are already committed; a failed audit must not roll
+    // them back, but it IS the integrity record — log loudly.
+    console.error(
+      "[submit-writeoff] audit insert failed:",
+      err instanceof Error ? err.message : err,
+    );
+  }
+
+  // ── Anti-batch signal for the risk engine (Prompt 10) ───────────────────────
+  // Tagged by the offline queue when a submission was flushed in an end-of-shift
+  // burst. We never block submit on this — it only creates a risk_event the
+  // risk engine can aggregate. Service role because risk_events INSERT is
+  // restricted to reviewer/admin.
+  if (batchBurst) {
+    const riskEntry: RiskEventInsert = {
+      writeoff_id: writeoff.id,
+      feature: "batch_burst",
+      weight: 0.4,
+      detail: {
+        source: "offline_queue",
+        submitted_at: new Date().toISOString(),
+      },
+    };
+    try {
+      await serviceClient.from("risk_events").insert(riskEntry);
+    } catch (err) {
+      // Non-fatal: the audit log already carries the batch_burst flag, so a
+      // risk_event insert failure must not roll back the writeoff.
+      console.error("[submit-writeoff] risk_event insert failed:", err);
+    }
+  }
+
+  // ── Photo forensics + risk/routing (Prompts 8–11) — deferred via after() ───
+  // Forensics (pHash + vision verify) and the risk recompute/router can take
+  // 10–30s (sharp + OpenAI + corpus scan). Running them inline blocked the
+  // server-action response and, on a DB schema mismatch or timeout, corrupted
+  // the RSC stream with cryptic client errors (frame.join / enqueueModel).
+  // The writeoff + photo + audit log are already committed; schedule the
+  // enrichment pass to run AFTER the action returns so the client gets an
+  // immediate optimistic success. Sequential inside after(): forensics first
+  // (emits risk_events), then recomputeAndRoute (scores + routes).
+  if (photoId) {
+    const bgWriteoffId = writeoff.id;
+    const bgPhotoId = photoId;
+    after(async () => {
+      try {
+        await runPhotoForensics(bgPhotoId);
+      } catch (err) {
+        console.error("[submit-writeoff] forensics pipeline failed:", err);
+      }
+      try {
+        await recomputeAndRoute(bgWriteoffId);
+      } catch (err) {
+        console.error("[submit-writeoff] risk/routing failed:", err);
+      }
+    });
+  }
 
   return {
     id: writeoff.id,

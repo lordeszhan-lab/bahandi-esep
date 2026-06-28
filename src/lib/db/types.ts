@@ -125,6 +125,7 @@ export type Database = {
           id: string
           location_id: string | null
           material_liability: boolean
+          monthly_salary: number | null
           position: string | null
         }
         Insert: {
@@ -133,6 +134,7 @@ export type Database = {
           id?: string
           location_id?: string | null
           material_liability?: boolean
+          monthly_salary?: number | null
           position?: string | null
         }
         Update: {
@@ -141,6 +143,7 @@ export type Database = {
           id?: string
           location_id?: string | null
           material_liability?: boolean
+          monthly_salary?: number | null
           position?: string | null
         }
         Relationships: [
@@ -148,7 +151,7 @@ export type Database = {
             foreignKeyName: "employees_location_id_fkey"
             columns: ["location_id"]
             isOneToOne: false
-            referencedRelation: "locations"
+            referencedRelation: "stores"
             referencedColumns: ["id"]
           },
         ]
@@ -241,36 +244,179 @@ export type Database = {
           },
         ]
       }
-      locations: {
+      cities: {
         Row: {
-          code: string
-          created_at: string
-          geofence_radius_m: number
           id: string
+          name: string
+          region: string | null
+        }
+        Insert: {
+          id?: string
+          name: string
+          region?: string | null
+        }
+        Update: {
+          id?: string
+          name?: string
+          region?: string | null
+        }
+        Relationships: []
+      }
+      stores: {
+        Row: {
+          address: string | null
+          city: string | null
+          city_id: string | null
+          cluster_id: string | null
+          created_at: string
+          display_name: string | null
+          format: "kiosk" | "mall" | "magnum" | "market" | "street" | null
+          geofence_radius_m: number | null
+          iiko_account_id: string | null
           iiko_store_id: string | null
+          id: string
+          is_active: boolean
           lat: number | null
           lng: number | null
           name: string
         }
         Insert: {
-          code: string
+          address?: string | null
+          city?: string | null
+          city_id?: string | null
+          cluster_id?: string | null
           created_at?: string
-          geofence_radius_m?: number
-          id?: string
+          display_name?: string | null
+          format?: "kiosk" | "mall" | "magnum" | "market" | "street" | null
+          geofence_radius_m?: number | null
+          iiko_account_id?: string | null
           iiko_store_id?: string | null
+          id?: string
+          is_active?: boolean
           lat?: number | null
           lng?: number | null
           name: string
         }
         Update: {
-          code?: string
+          address?: string | null
+          city?: string | null
+          city_id?: string | null
+          cluster_id?: string | null
           created_at?: string
-          geofence_radius_m?: number
-          id?: string
+          display_name?: string | null
+          format?: "kiosk" | "mall" | "magnum" | "market" | "street" | null
+          geofence_radius_m?: number | null
+          iiko_account_id?: string | null
           iiko_store_id?: string | null
+          id?: string
+          is_active?: boolean
           lat?: number | null
           lng?: number | null
           name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stores_city_id_fkey"
+            columns: ["city_id"]
+            isOneToOne: false
+            referencedRelation: "cities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stores_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "store_clusters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      store_clusters: {
+        Row: {
+          city_id: string | null
+          created_at: string
+          id: string
+          name: string
+        }
+        Insert: {
+          city_id?: string | null
+          created_at?: string
+          id?: string
+          name: string
+        }
+        Update: {
+          city_id?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_clusters_city_id_fkey"
+            columns: ["city_id"]
+            isOneToOne: false
+            referencedRelation: "cities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reviewer_clusters: {
+        Row: {
+          cluster_id: string
+          created_at: string
+          reviewer_id: string
+        }
+        Insert: {
+          cluster_id: string
+          created_at?: string
+          reviewer_id: string
+        }
+        Update: {
+          cluster_id?: string
+          created_at?: string
+          reviewer_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reviewer_clusters_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "store_clusters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reviewer_clusters_reviewer_id_fkey"
+            columns: ["reviewer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      format_baselines: {
+        Row: {
+          format: "kiosk" | "mall" | "magnum" | "market" | "street"
+          expected_writeoffs_per_day: number
+          expected_accidental_share: number
+          expected_breakage_share: number
+          expected_spoilage_share: number
+          high_value_threshold: number | null
+        }
+        Insert: {
+          format: "kiosk" | "mall" | "magnum" | "market" | "street"
+          expected_writeoffs_per_day: number
+          expected_accidental_share: number
+          expected_breakage_share: number
+          expected_spoilage_share: number
+          high_value_threshold?: number | null
+        }
+        Update: {
+          format?: "kiosk" | "mall" | "magnum" | "market" | "street"
+          expected_writeoffs_per_day?: number
+          expected_accidental_share?: number
+          expected_breakage_share?: number
+          expected_spoilage_share?: number
+          high_value_threshold?: number | null
         }
         Relationships: []
       }
@@ -304,7 +450,7 @@ export type Database = {
             foreignKeyName: "profiles_location_id_fkey"
             columns: ["location_id"]
             isOneToOne: false
-            referencedRelation: "locations"
+            referencedRelation: "stores"
             referencedColumns: ["id"]
           },
         ]
@@ -436,17 +582,22 @@ export type Database = {
       }
       writeoffs: {
         Row: {
+          assigned_queue: string | null
           charged_employee_id: string | null
           comment: string | null
           created_at: string
           decided_at: string | null
           decided_by: string | null
+          escalation_tier: string | null
           id: string
           iiko_sync_status: string
           location_id: string
           qty: number
           reason_code_id: string
+          risk_features: Json | null
           risk_score: number
+          sla_due_at: string | null
+          sla_escalated_at: string | null
           status: string
           submitter_id: string
           unit: string
@@ -454,17 +605,22 @@ export type Database = {
           withholding: boolean
         }
         Insert: {
+          assigned_queue?: string | null
           charged_employee_id?: string | null
           comment?: string | null
           created_at?: string
           decided_at?: string | null
           decided_by?: string | null
+          escalation_tier?: string | null
           id?: string
           iiko_sync_status?: string
           location_id: string
           qty: number
           reason_code_id: string
+          risk_features?: Json | null
           risk_score?: number
+          sla_due_at?: string | null
+          sla_escalated_at?: string | null
           status?: string
           submitter_id: string
           unit: string
@@ -472,17 +628,22 @@ export type Database = {
           withholding?: boolean
         }
         Update: {
+          assigned_queue?: string | null
           charged_employee_id?: string | null
           comment?: string | null
           created_at?: string
           decided_at?: string | null
           decided_by?: string | null
+          escalation_tier?: string | null
           id?: string
           iiko_sync_status?: string
           location_id?: string
           qty?: number
           reason_code_id?: string
+          risk_features?: Json | null
           risk_score?: number
+          sla_due_at?: string | null
+          sla_escalated_at?: string | null
           status?: string
           submitter_id?: string
           unit?: string
@@ -501,7 +662,7 @@ export type Database = {
             foreignKeyName: "writeoffs_location_id_fkey"
             columns: ["location_id"]
             isOneToOne: false
-            referencedRelation: "locations"
+            referencedRelation: "stores"
             referencedColumns: ["id"]
           },
           {
@@ -521,7 +682,7 @@ export type Database = {
       get_my_role: { Args: never; Returns: string }
     }
     Enums: {
-      [_ in never]: never
+      store_format: "kiosk" | "mall" | "magnum" | "market" | "street"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -648,7 +809,9 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      store_format: ["kiosk", "mall", "magnum", "market", "street"],
+    },
   },
 } as const
 
@@ -658,7 +821,12 @@ export const Constants = {
 
 /** Row types — use for read paths */
 export type Profile           = Tables<"profiles">
-export type Location          = Tables<"locations">
+export type Store             = Tables<"stores">
+export type City              = Tables<"cities">
+export type StoreCluster      = Tables<"store_clusters">
+export type ReviewerCluster   = Tables<"reviewer_clusters">
+export type FormatBaseline    = Tables<"format_baselines">
+export type StoreFormat       = Enums<"store_format">
 export type Employee          = Tables<"employees">
 export type ReasonCode        = Tables<"reason_codes">
 export type Writeoff          = Tables<"writeoffs">
@@ -683,3 +851,6 @@ export type WriteoffStatus    = "draft" | "submitted" | "auto_approved" | "in_re
 export type ReasonCategory    = "yield" | "quality" | "accidental" | "spoilage" | "return" | "breakage"
 export type DeductionStatus   = "proposed" | "acknowledged" | "disputed" | "approved" | "applied" | "cancelled"
 export type IikoSyncStatus    = "none" | "pending" | "synced" | "error"
+
+/** Prompt 11 — value-based review escalation tiers (manager → area → finance). */
+export type EscalationTier    = "location_manager" | "area" | "finance"

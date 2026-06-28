@@ -159,11 +159,12 @@
     border-radius: var(--radius-card);
     box-shadow: var(--shadow-card);
     padding: 1.25rem 1.5rem;
-    transition: transform 150ms ease-out, box-shadow 150ms ease-out;
+    transition: transform 220ms cubic-bezier(.22,1,.36,1), box-shadow 220ms ease-out;
+    will-change: transform;
   }
 
   .card:hover {
-    transform: translateY(-2px);
+    transform: translateY(-4px);
     box-shadow: var(--shadow-card-hover);
   }
 
@@ -243,6 +244,76 @@
     pointer-events: none;
   }
 
+  /* Secondary outline pill — surface fill + hairline border, muted ink. */
+  .btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    background: var(--surface);
+    color: var(--fg);
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 0.8125rem;
+    line-height: 1;
+    padding: 0.5rem 0.875rem;
+    border-radius: 9999px;
+    border: 1.5px solid var(--border);
+    cursor: pointer;
+    transition: background 150ms ease-out, border-color 150ms ease-out, transform 150ms ease-out;
+    user-select: none;
+    white-space: nowrap;
+    text-decoration: none;
+  }
+
+  .btn-secondary:hover {
+    background: var(--surface-2);
+    border-color: var(--fg-faint);
+  }
+
+  .btn-secondary:active {
+    transform: scale(0.99);
+  }
+
+  .btn-secondary:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+
+  /* Ghost pill — transparent fill, muted ink; the quietest control. */
+  .btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    background: transparent;
+    color: var(--fg-muted);
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 0.8125rem;
+    line-height: 1;
+    padding: 0.45rem 0.75rem;
+    border-radius: 9999px;
+    border: 1.5px solid transparent;
+    cursor: pointer;
+    transition: background 150ms ease-out, color 150ms ease-out;
+    user-select: none;
+    white-space: nowrap;
+    text-decoration: none;
+  }
+
+  .btn-ghost:hover {
+    background: var(--surface-2);
+    color: var(--fg);
+  }
+
+  .btn-ghost:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+
   /* Chip — squircle pastel background + ink icon/label */
   .chip {
     display: inline-flex;
@@ -287,7 +358,8 @@
   .pill-status[data-risk="fraud"]    { background: var(--risk-fraud-soft); color: var(--risk-fraud-ink); }
   .pill-status[data-risk="info"]     { background: var(--risk-info-soft);  color: var(--risk-info-ink);  }
 
-  /* Eyebrow — mono uppercase label (section headers, field labels) */
+  /* Eyebrow — mono uppercase label. Reserved for the login brand only;
+     finance/forensics surfaces use .section-label instead. */
   .eyebrow {
     font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
     font-size: 0.6875rem;
@@ -296,6 +368,18 @@
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--fg-muted);
+  }
+
+  /* Section label — Nunito sentence case (review cockpit, tower, etc.) */
+  .section-label {
+    font-family: inherit;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--fg-muted);
+    margin: 0;
   }
 
   /* Form label */
@@ -342,7 +426,38 @@
   }
 }
 
-/* ─── Reduced motion — disable lifts/springs, keep instant states ─────────── */
+/* ─── Reason card — white + hover-lift; selected overridden inline ─────────── */
+.reason-card {
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  transition:
+    transform 160ms ease-out,
+    box-shadow 160ms ease-out,
+    background 150ms ease-out;
+}
+
+.reason-card:not([data-selected="true"]):hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-card-hover);
+}
+
+/* ─── Entrance animation — form sections + reason cards ───────────────────── */
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-up {
+  animation: fade-up 320ms ease-out both;
+}
+
+/* ─── Reduced motion — disable lifts/springs/entrance, keep instant states ── */
 @media (prefers-reduced-motion: reduce) {
   .card,
   .card:hover,
@@ -352,4 +467,74 @@
     transform: none;
     animation: none;
   }
+
+  .fade-up {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
 }
+
+/* ─── Disclosure chevron — rotates when its <details> is open ──────────────── */
+details.group > summary .deduction-chev {
+  transition: transform 180ms ease-out;
+}
+details.group[open] > summary .deduction-chev {
+  transform: rotate(180deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  details.group > summary .deduction-chev {
+    transition: none;
+  }
+}
+
+/* ─── Offline shell (PWA — Prompt 23.1) ──────────────────────────────────────
+   Served by the service worker when a navigation fails offline. On-system:
+   canvas bg, surface card, Nunito. No joy — static informational surface. */
+.offline-shell {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: var(--canvas);
+}
+
+.offline-card {
+  max-width: 26rem;
+  text-align: center;
+  /* Informational only — suppress the default card hover-lift. */
+  transform: none;
+}
+
+.offline-card:hover {
+  transform: none;
+  box-shadow: var(--shadow-card);
+}
+
+.offline-mark {
+  width: 3.5rem;
+  height: 3.5rem;
+  margin: 0 auto 1rem;
+  border-radius: 0.75rem;
+  background: var(--brand);
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 1.75rem;
+  line-height: 3.5rem;
+}
+
+.offline-title {
+  margin: 0 0 0.5rem;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--fg);
+}
+
+.offline-body {
+  margin: 0;
+  font-size: 0.9375rem;
+  color: var(--fg-muted);
+  line-height: 1.5;
+}
+

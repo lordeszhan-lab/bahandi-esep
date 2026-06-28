@@ -14,71 +14,86 @@ import {
   Workflow,
   Users,
   ShieldCheck,
+  Network,
+  Scale,
   Sun,
   Moon,
   LogOut,
 } from "lucide-react";
 import { APP_NAME } from "@/lib/brand";
 import { AccountBlock } from "@/components/account-block";
-import { DevPreviewProvider, useDevPreview } from "@/lib/dev-preview";
 import type { CurrentProfile } from "@/lib/auth-shared";
 import type { UserRole } from "@/lib/db/types";
-import type { DevLocationOption } from "@/components/dev/role-switcher";
 
 // ── Navigation structure ──────────────────────────────────────────────────────
+// Single source of truth: a flat list of nav items, each tagged with the roles
+// allowed to see it. Items with `built: false` have no real screen yet and are
+// never rendered (kept here so they reappear the moment they ship).
+
+type NavGroupKey = "review" | "manage";
+
+const NAV_GROUP_LABEL: Record<NavGroupKey, string> = {
+  review: "Проверка",
+  manage: "Управление",
+};
 
 interface NavItem {
   label: string;
   href: string;
   Icon: LucideIcon;
+  roles: UserRole[];
+  built?: boolean;
+  group?: NavGroupKey;
 }
+
+const NAV_ITEMS: NavItem[] = [
+  // Employee — capture flow (no section header)
+  { label: "Фиксация",     href: "/capture",         Icon: ClipboardList, roles: ["employee"] },
+  { label: "Мои списания", href: "/capture/history", Icon: History,        roles: ["employee"] },
+
+  // Review — «Проверка»
+  { label: "Очередь",       href: "/review",                Icon: ListChecks,  roles: ["reviewer", "admin"], group: "review" },
+  { label: "Башня",         href: "/review/tower",          Icon: BarChart3,   roles: ["reviewer", "admin"], group: "review" },
+  { label: "Удержания",     href: "/review/deductions",     Icon: Scale,       roles: ["reviewer", "admin"], group: "review" },
+  { label: "Расследования", href: "/review/investigations", Icon: Search,      roles: ["reviewer", "admin"], group: "review", built: false },
+
+  // Manage — «Управление»
+  { label: "Iiko",         href: "/admin/iiko",     Icon: Database,    roles: ["admin"], group: "manage" },
+  { label: "Маппинг",      href: "/admin/mapping",  Icon: Workflow,    roles: ["admin"], group: "manage" },
+  { label: "Кластеры",     href: "/admin/clusters", Icon: Network,     roles: ["admin"], group: "manage" },
+  { label: "Пользователи", href: "/admin/users",    Icon: Users,       roles: ["admin"], group: "manage" },
+  { label: "Аудит",        href: "/admin/audit",    Icon: ShieldCheck, roles: ["admin"], group: "manage", built: false },
+];
 
 interface NavGroup {
   groupLabel?: string;
   items: NavItem[];
 }
 
-const REVIEWER_ITEMS: NavItem[] = [
-  { label: "Очередь",        href: "/review",                Icon: ListChecks },
-  { label: "Башня",          href: "/review/tower",          Icon: BarChart3  },
-  { label: "Расследования",  href: "/review/investigations", Icon: Search     },
-];
-
-const NAV: Record<UserRole, NavGroup[]> = {
-  employee: [
-    {
-      items: [
-        { label: "Фиксация",      href: "/capture",         Icon: ClipboardList },
-        { label: "Мои списания",  href: "/capture/history", Icon: History       },
-      ],
-    },
-  ],
-  reviewer: [
-    { items: REVIEWER_ITEMS },
-  ],
-  admin: [
-    {
-      groupLabel: "Проверка",
-      items: REVIEWER_ITEMS,
-    },
-    {
-      groupLabel: "Управление",
-      items: [
-        { label: "Iiko",           href: "/admin/iiko",    Icon: Database   },
-        { label: "Маппинг",        href: "/admin/mapping", Icon: Workflow   },
-        { label: "Пользователи",   href: "/admin/users",   Icon: Users      },
-        { label: "Аудит",          href: "/admin/audit",   Icon: ShieldCheck },
-      ],
-    },
-  ],
-};
+/** Filter to built items visible to `role`, then collapse consecutive items
+ *  that share the same section label into groups. Empty sections never render. */
+function buildNavGroups(role: UserRole): NavGroup[] {
+  const visible = NAV_ITEMS.filter(
+    (i) => i.built !== false && i.roles.includes(role),
+  );
+  const groups: NavGroup[] = [];
+  for (const item of visible) {
+    const label = item.group ? NAV_GROUP_LABEL[item.group] : undefined;
+    const last = groups[groups.length - 1];
+    if (last && last.groupLabel === label) {
+      last.items.push(item);
+    } else {
+      groups.push({ groupLabel: label, items: [item] });
+    }
+  }
+  return groups;
+}
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 export interface AppShellClientProps {
   profile: CurrentProfile;
   logoutAction: (formData: FormData) => Promise<void>;
-  devLocations?: DevLocationOption[];
   children: React.ReactNode;
 }
 
@@ -87,12 +102,10 @@ export interface AppShellClientProps {
 function AppShellInner({
   profile,
   logoutAction,
-  devLocations,
   children,
 }: AppShellClientProps) {
   const pathname = usePathname();
   const [theme, setTheme] = useState<"light" | "dark">("light");
-  const { effectiveRole } = useDevPreview();
 
   // Sync with data-theme set on <html> server-side; runs after hydration — no mismatch.
   useEffect(() => {
@@ -105,12 +118,19 @@ function AppShellInner({
     setTheme(next);
   }
 
-  function isActive(href: string) {
-    return pathname === href || pathname.startsWith(href + "/");
-  }
+  const navGroups = buildNavGroups(profile.role);
+  const allNavHrefs = navGroups.flatMap((g) => g.items.map((i) => i.href));
 
-  const navGroups = NAV[effectiveRole];
-  const isEmployee = effectiveRole === "employee";
+  /** Exactly one nav item active: longest href that matches wins over prefixes. */
+  function isActive(href: string) {
+    const matches = allNavHrefs.filter(
+      (h) => pathname === h || pathname.startsWith(h + "/"),
+    );
+    if (matches.length === 0) return false;
+    const best = matches.reduce((a, b) => (a.length >= b.length ? a : b));
+    return best === href;
+  }
+  const isEmployee = profile.role === "employee";
   const bottomItems = navGroups.flatMap((g) => g.items);
 
   // ── Nav link ──────────────────────────────────────────────────────────────
@@ -255,7 +275,6 @@ function AppShellInner({
             <AccountBlock
               profile={profile}
               logoutAction={logoutAction}
-              devLocations={devLocations}
             />
           </div>
         </aside>
@@ -304,9 +323,5 @@ function AppShellInner({
 }
 
 export function AppShellClient(props: AppShellClientProps) {
-  return (
-    <DevPreviewProvider realRole={props.profile.role}>
-      <AppShellInner {...props} />
-    </DevPreviewProvider>
-  );
+  return <AppShellInner {...props} />;
 }

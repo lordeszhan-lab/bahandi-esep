@@ -1,17 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { Settings, LogOut } from "lucide-react";
+import { Settings, LogOut, MapPin } from "lucide-react";
 import { ROLE_LABEL } from "@/lib/auth-shared";
-import { useDevPreview } from "@/lib/dev-preview";
 import type { CurrentProfile } from "@/lib/auth-shared";
-import type { UserRole } from "@/lib/db/types";
-import type { DevLocationOption } from "@/components/dev/role-switcher";
 
 export interface AccountBlockProps {
   profile: CurrentProfile;
   logoutAction: (formData: FormData) => Promise<void>;
-  devLocations?: DevLocationOption[];
 }
 
 function IconBtn({
@@ -40,26 +36,10 @@ function IconBtn({
   );
 }
 
-function DevSwitcherSlot({
-  realRole,
-  locations,
-}: {
-  realRole: UserRole;
-  locations: DevLocationOption[];
-}) {
-  if (process.env.NODE_ENV === "production") return null;
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { DevRoleSwitcher } = require("@/components/dev/role-switcher") as typeof import("@/components/dev/role-switcher");
-  return <DevRoleSwitcher realRole={realRole} locations={locations} />;
-}
-
 export function AccountBlock({
   profile,
   logoutAction,
-  devLocations = [],
 }: AccountBlockProps) {
-  const { effectiveRole } = useDevPreview();
-
   return (
     <div className="p-3 space-y-2">
       {/* Identity row */}
@@ -77,7 +57,7 @@ export function AccountBlock({
           {profile.initials}
         </div>
 
-        {/* Name + role */}
+        {/* Name + branch (assigned) / role */}
         <div className="flex-1 min-w-0">
           <p
             className="text-sm truncate leading-snug"
@@ -85,19 +65,31 @@ export function AccountBlock({
           >
             {profile.full_name}
           </p>
-          <p
-            className="leading-tight truncate"
-            style={{ fontSize: 12, color: "var(--fg-muted)" }}
-          >
-            {ROLE_LABEL[effectiveRole]}
-          </p>
+          {profile.location ? (
+            <p
+              className="flex items-center gap-1 leading-tight truncate"
+              style={{ fontSize: 12, color: "var(--fg-muted)" }}
+            >
+              <MapPin
+                size={11}
+                strokeWidth={1.9}
+                style={{ color: "var(--brand-strong)", flexShrink: 0 }}
+              />
+              <span className="truncate">
+                {profile.location.city ? `${profile.location.city} — ` : ""}
+                {profile.location.display_name ?? profile.location.name}
+              </span>
+            </p>
+          ) : (
+            <p
+              className="leading-tight truncate"
+              style={{ fontSize: 12, color: "var(--fg-muted)" }}
+            >
+              {ROLE_LABEL[profile.role]}
+            </p>
+          )}
         </div>
       </div>
-
-      {/* Dev role / location preview */}
-      {process.env.NODE_ENV !== "production" && (
-        <DevSwitcherSlot realRole={profile.role} locations={devLocations} />
-      )}
 
       {/* Action row */}
       <div className="flex items-center gap-1 px-1">
